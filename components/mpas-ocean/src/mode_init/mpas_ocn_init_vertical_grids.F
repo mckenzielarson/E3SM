@@ -505,7 +505,12 @@ contains
       integer, intent(in) :: minLevelCell, maxLevelCell, nVertLevels
       integer, intent(out) :: iErr
 
-      integer :: k
+      !! hard code refIceFrontDraft for now
+      integer :: refIceFrontDraft
+      integer :: iCell, k !adding iCell
+      integer, pointer :: nCells
+      type (mpas_pool_type), pointer :: meshPool, statePool, verticalMeshPool
+      call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
 
       iErr = 0
 
@@ -528,6 +533,21 @@ contains
          layerThickness(k) = bottomDepth - refBottomDepth(k-1)
 
       endif
+    
+      
+      refIceFrontDraft = 150 !set this value for now
+      
+      ! adding this:
+      do iCell = 1, nCells
+         if (ssh < refIceFrontDraft) then
+            k = maxLevelCell
+            do while (refBottomDepth(k) < (refIceFrontDraft - layerThickness(k)))
+               k = k - 1
+            end do
+            !minLevelCell = k
+            layerThickness(k) = bottomDepth - refBottomDepth(k-1)
+         endif
+      end do  
 
     end subroutine ocn_compute_z_level_layerThickness  !}}}
 
@@ -591,7 +611,7 @@ contains
       integer, intent(out) :: iErr
 
       integer :: k
-      real (kind=RKIND) :: layerStretch
+      real (kind=RKIND) :: layerStretch, restingThicknessSum
 
       iErr = 0
 
@@ -599,7 +619,11 @@ contains
 
       if (maxLevelCell<=0) return
 
-      layerStretch = (ssh + bottomDepth)/bottomDepth
+      ! removing this: layerStretch = (ssh + bottomDepth)/bottomDepth
+      do k = minLevelCell, maxLevelCell
+         restingThicknessSum = restingThicknessSum + restingThickness(k)
+      end do
+      layerStretch = (ssh + bottomDepth)/restingThicknessSum
       do k = minLevelCell, maxLevelCell
          layerThickness(k) = layerStretch * restingThickness(k)
       end do
