@@ -106,7 +106,7 @@ contains
     real (kind=RKIND), dimension(:), pointer :: yCell, refBottomDepth, bottomDepth, vertCoordMovementWeights, dcEdge
     real (kind=RKIND), dimension(:), pointer :: tidalInputMask
     real (kind=RKIND), dimension(:), pointer :: bottomDrag
-    real (kind=RKIND), dimension(:), pointer :: ssh
+    real (kind=RKIND), dimension(:), pointer :: ssh, landIceDraft
     real (kind=RKIND), dimension(:,:), pointer :: layerThickness, restingThickness
     real (kind=RKIND), dimension(:,:,:), pointer :: activeTracers, debugTracers
     real (kind=RKIND), dimension(:), pointer :: interfaceLocations
@@ -160,6 +160,8 @@ contains
       call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
       call mpas_pool_get_subpool(block_ptr % structs, 'forcing', forcingPool)
       call mpas_pool_get_array(forcingPool, 'tidalInputMask', tidalInputMask)
+      ! add landIceDraft
+      call mpas_pool_get_array(forcingPool, 'landIceDraft', landIceDraft)
 
       call mpas_pool_get_array(meshPool, 'yCell', yCell)
       call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
@@ -377,9 +379,10 @@ contains
       else
         do iCell = 1, nCellsSolve
           ! restingThickness is z-level, with ssh = 0
+          ! add landIceDraft
           call ocn_compute_z_level_layerThickness(restingThickness(:,iCell), refBottomDepth, 0.0_RKIND, &
                                                   bottomDepth(iCell), minLevelCell(iCell),              &
-                                                  maxLevelCell(iCell), nVertLevels, iErr)
+                                                  maxLevelCell(iCell), nVertLevels, iErr, landIceDraft(iCell))
 
           ! stretch restingThickness to get the z-star layerThickness
           call ocn_compute_z_star_layerThickness(layerThickness(:,iCell), restingThickness(:,iCell),  &

@@ -662,10 +662,10 @@ contains
 
        type (block_type), pointer :: block_ptr
 
-       type (mpas_pool_type), pointer :: meshPool, verticalMeshPool, criticalPassagesPool
+       type (mpas_pool_type), pointer :: meshPool, verticalMeshPool,criticalPassagesPool, forcingPool
 
        real (kind=RKIND), dimension(:), pointer :: latCell, lonCell, bottomDepth, bottomDepthObserved, &
-            refBottomDepth, refLayerThickness, refZMid, oceanFracObserved, bed_elevation
+            refBottomDepth, refLayerThickness, refZMid, oceanFracObserved, bed_elevation, landIceDraft
 
        integer, pointer :: nCells, nCellsSolve, nVertLevels
 
@@ -849,6 +849,8 @@ contains
        do while(associated(block_ptr))
           call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
           call mpas_pool_get_subpool(block_ptr % structs, 'verticalMesh', verticalMeshPool)
+          !! add forcingPool
+          call mpas_pool_get_subpool(block_ptr % structs,'forcing', forcingPool)
 
           call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
 
@@ -857,10 +859,14 @@ contains
           call mpas_pool_get_array(verticalMeshPool, 'refLayerThickness', refLayerThickness)
           call mpas_pool_get_array(verticalMeshPool, 'refZMid', refZMid)
 
+          ! get landIceDraft
+          call mpas_pool_get_array(forcingPool, 'landIceDraft',landIceDraft)
+
           ! Compute refLayerThickness
+          ! add landIceDraft
           call ocn_compute_z_level_layerThickness(refLayerThickness, refBottomDepth, 0.0_RKIND, &
-                                                  refBottomDepth(nVertLevels), 1,               &
-                                                  nVertLevels, nVertLevels, iErr)
+                                                  refBottomDepth(nVertLevels),minLevelCell(nVertLevels), &
+                                                  nVertLevels, nVertLevels, iErr, landIceDraft(nVertLevels))
 
           ! Compute refZMid
           call ocn_compute_zMid_from_layerThickness(refZMid, refLayerThickness, 0.0_RKIND, 1, &

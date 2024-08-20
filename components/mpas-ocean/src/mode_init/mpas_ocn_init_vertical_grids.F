@@ -497,20 +497,21 @@ contains
 !
 !-----------------------------------------------------------------------
 
+    !! no includes landIceDraft as an argument
     subroutine ocn_compute_z_level_layerThickness(layerThickness, refBottomDepth, ssh, bottomDepth, &
-                                                  minLevelCell, maxLevelCell, nVertLevels, iErr)!{{{
+                                                  minLevelCell, maxLevelCell, nVertLevels, iErr, landIceDraft)!{{{
       real (kind=RKIND), dimension(nVertLevels), intent(out) :: layerThickness
       real (kind=RKIND), dimension(nVertLevels), intent(in) :: refBottomDepth
-      real (kind=RKIND), intent(in) :: ssh, bottomDepth
-      integer, intent(in) :: minLevelCell, maxLevelCell, nVertLevels
+      real (kind=RKIND), intent(in) :: ssh, bottomDepth, landIceDraft
+      integer, intent(in) :: maxLevelCell, nVertLevels
       integer, intent(out) :: iErr
+      integer, intent(inout) :: minLevelCell
 
       !! hard code refIceFrontDraft for now
-      integer :: refIceFrontDraft
-      integer :: iCell, k !adding iCell
-      integer, pointer :: nCells
-      type (mpas_pool_type), pointer :: meshPool, statePool, verticalMeshPool
-      call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+      !! real parameter
+      real (kind=RKIND) :: refIceFrontDraft, minLayerThickness, zBot, zTop
+      integer :: k
+      
 
       iErr = 0
 
@@ -534,20 +535,28 @@ contains
 
       endif
     
+      ! adding the code below:
+      refIceFrontDraft = -100.0_RKIND
+      minLayerThickness = 2.0_RKIND
       
-      refIceFrontDraft = 150 !set this value for now
-      
-      ! adding this:
-      do iCell = 1, nCells
-         if (ssh < refIceFrontDraft) then
-            k = maxLevelCell
-            do while (refBottomDepth(k) < (refIceFrontDraft - layerThickness(k)))
-               k = k - 1
-            end do
-            !minLevelCell = k
-            layerThickness(k) = bottomDepth - refBottomDepth(k-1)
-         endif
-      end do  
+     if (landIceDraft > 0.0_RKIND) then
+        k = maxLevelCell
+        zBot = -refBottomDepth(k)
+        zTop = zBot + layerThickness(k)
+        do while (zTop < max(refIceFrontDraft, landIceDraft))
+           k = k - 1
+           zBot = -refBottomDepth(k)
+           zTop = zBot + layerThickness(k)
+        end do
+        if (zTop - zBot < minLayerThickness) k = k + 1
+        minLevelCell = k
+        layerThickness(k) = bottomDepth - refBottomDepth(k-1)
+     endif
+     
+     !! adding this (#2)
+     !! do this everywhere we have land ice, not just ssh
+     !landIceFloatingMask or landIcePressure > 0
+        
 
     end subroutine ocn_compute_z_level_layerThickness  !}}}
 
@@ -876,14 +885,15 @@ contains
 
      type (block_type), pointer :: block_ptr
 
-     type (mpas_pool_type), pointer :: meshPool, statePool, verticalMeshPool
+     type (mpas_pool_type), pointer :: meshPool, statePool, verticalMeshPool, forcingPool
 
      ! Define dimension pointers
      integer, pointer :: nCells, nVertLevels
 
      ! Define variable pointers
      integer, dimension(:), pointer :: minLevelCell, maxLevelCell
-     real (kind=RKIND), dimension(:), pointer :: refBottomDepth, bottomDepth, ssh
+     !! double check dimension of landIceDraft
+     real (kind=RKIND), dimension(:), pointer :: refBottomDepth, bottomDepth, ssh, landIceDraft
      real (kind=RKIND), dimension(:,:), pointer :: layerThickness, restingThickness
 
      integer :: iCell, k
@@ -924,6 +934,8 @@ contains
          call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
          call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
          call mpas_pool_get_subpool(block_ptr % structs, 'verticalMesh', verticalMeshPool)
+         !! point to the forcing pool:
+         call mpas_pool_get_subpool(block_ptr % structs, 'forcing', forcingPool)
 
          call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
          call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
@@ -937,6 +949,8 @@ contains
          call mpas_pool_get_array(statePool, 'ssh', ssh, 1)
 
          call mpas_pool_get_array(verticalMeshPool, 'restingThickness', restingThickness)
+         !! get landIceDraft
+         call mpas_pool_get_array(forcingPool, 'landIceDraft', landIceDraft)
 
          do iCell = 1, nCells
            ! alter pbcs
@@ -947,9 +961,10 @@ contains
            end if
 
            ! restingThickness is z-level, with ssh = 0
+           !! add landIceDraft as argument into function ocn_compute_z_level_layerThickness
            call ocn_compute_z_level_layerThickness(restingThickness(:,iCell), refBottomDepth, 0.0_RKIND, &
                                                    bottomDepth(iCell), minLevelCell(iCell),              &
-                                                   maxLevelCell(iCell), nVertLevels, iErr)
+                                                   maxLevelCell(iCell), nVertLevels, iErr, landIceDraft(iCell))
 
            if(iErr .ne. 0) then
              call mpas_log_write( 'ocn_compute_z_level_layerThickness failed.', MPAS_LOG_CRIT)
@@ -986,6 +1001,8 @@ contains
          call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
          call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
          call mpas_pool_get_subpool(block_ptr % structs, 'verticalMesh', verticalMeshPool)
+         !! point to forcing struct
+         call mpas_pool_get_subpool(block_ptr % structs, 'forcing', forcingPool)
 
          call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
          call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
@@ -999,6 +1016,9 @@ contains
          call mpas_pool_get_array(statePool, 'ssh', ssh, 1)
 
          call mpas_pool_get_array(verticalMeshPool, 'restingThickness', restingThickness)
+         
+         !! get landIceDraft
+        call mpas_pool_get_array(forcingPool, 'landIceDraft', landIceDraft)
 
          ! compute minLevelCell and maxLevelCell based on refBottomDepth, ssh and bottomDepth
          do iCell = 1, nCells
@@ -1042,9 +1062,12 @@ contains
            end if
 
            ! layerThickness is z-level
+           !! add landIceDraft as argument into function ocn_compute_z_level_layerThickness
+           !! we are only running z-star currently (eventually add an IF statement to see if z-star
+           !! to include landIceDraft)
            call ocn_compute_z_level_layerThickness(layerThickness(:,iCell), refBottomDepth, ssh(iCell), &
                                                    bottomDepth(iCell), minLevelCell(iCell),             &
-                                                   maxLevelCell(iCell), nVertLevels, iErr)
+                                                   maxLevelCell(iCell), nVertLevels, iErr, landIceDraft(iCell))
 
            if(iErr .ne. 0) then
              call mpas_log_write( 'ocn_compute_z_level_layerThickness failed.', MPAS_LOG_CRIT)
@@ -1253,6 +1276,7 @@ contains
         call mpas_pool_get_array(scratchPool, 'zInterfaceScratch', zInterface)
 
         call mpas_pool_get_array(verticalMeshPool, 'refLayerThickness', refLayerThickness)
+        
 
         do iCell = 1, nCells
           if(maxLevelCell(iCell) <= 0) then

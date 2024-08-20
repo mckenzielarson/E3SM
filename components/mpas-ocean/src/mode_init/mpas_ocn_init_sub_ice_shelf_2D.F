@@ -109,7 +109,8 @@ module ocn_init_sub_ice_shelf_2D
 
      logical, pointer :: on_a_sphere
 
-     real(kind=RKIND), dimension(:), pointer :: landIceFraction, ssh
+     !! add landIceDraft
+     real(kind=RKIND), dimension(:), pointer :: landIceFraction, ssh, landIceDraft
 
      iErr = 0
 
@@ -197,7 +198,9 @@ module ocn_init_sub_ice_shelf_2D
 
         call mpas_pool_get_array(forcingPool, 'landIceFraction', landIceFraction)
         call mpas_pool_get_array(forcingPool, 'landIceMask', landIceMask)
-
+        !! add landIceDraft
+        call mpas_pool_get_array(forcingPool, 'landIceDraft', landIceDraft)
+        
         call mpas_pool_get_array(statePool, 'ssh', ssh, 1)
         call ocn_mark_north_boundary(meshPool, yMaxGlobal, dcEdgeMinGlobal, iErr)
         call ocn_mark_south_boundary(meshPool, yMinGlobal, dcEdgeMinGlobal, iErr)
@@ -208,9 +211,11 @@ module ocn_init_sub_ice_shelf_2D
         end do
 
         ! Compute refLayerThickness
+        !! add landIceDraft
+        !! 1 for minLevelCell is no longer valid
         call ocn_compute_z_level_layerThickness(refLayerThickness, refBottomDepth, 0.0_RKIND, &
-                                                refBottomDepth(nVertLevels), 1,               &
-                                                nVertLevels, nVertLevels, iErr)
+                                                refBottomDepth(nVertLevels), minLevelCell(nVertLevels),               &
+                                                nVertLevels, nVertLevels, iErr, landIceDraft(nVertLevels))
 
         ! Compute refZMid
         call ocn_compute_zMid_from_layerThickness(refZMid, refLayerThickness, 0.0_RKIND, 1, &

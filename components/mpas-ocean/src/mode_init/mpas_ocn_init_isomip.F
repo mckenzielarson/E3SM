@@ -106,7 +106,7 @@ contains
                                                   fCell, fEdge, fVertex, dcEdge, &
                                                   landIceFraction, landIceSurfaceTemperature, &
                                                   refLayerThickness, refZMid, &
-                                                  ssh
+                                                  ssh, landIceDraft
       !real (kind=RKIND), dimension(:), pointer :: temperatureRestore, salinityRestore, maskRestore
       real (kind=RKIND), dimension(:,:), pointer :: layerThickness, restingThickness
       real (kind=RKIND), dimension(:,:,:), pointer :: activeTracers, debugTracers
@@ -224,6 +224,7 @@ contains
         call mpas_pool_get_array(forcingPool, 'landIceFraction', landIceFraction)
         call mpas_pool_get_array(forcingPool, 'landIceSurfaceTemperature', landIceSurfaceTemperature)
         call mpas_pool_get_array(forcingPool, 'landIceMask', landIceMask)
+        call mpas_pool_get_array(forcingPool, 'landIceDraft', landIceDraft)
 
         call mpas_pool_get_array(verticalMeshPool, 'restingThickness', restingThickness)
         call mpas_pool_get_array(verticalMeshPool, 'refLayerThickness', refLayerThickness)
@@ -260,9 +261,10 @@ contains
         end do
 
         ! Compute refLayerThickness
+        ! add landIceDraft
         call ocn_compute_z_level_layerThickness(refLayerThickness, refBottomDepth, 0.0_RKIND, &
-                                                refBottomDepth(nVertLevels), 1,               &
-                                                nVertLevels, nVertLevels, iErr)
+                                                refBottomDepth(nVertLevels), minLevelCell(nVertLevels),               &
+                                                nVertLevels, nVertLevels, iErr, landIceDraft(nVertLevels))
 
         ! Compute refZMid
         call ocn_compute_zMid_from_layerThickness(refZMid, refLayerThickness, 0.0_RKIND, 1, &

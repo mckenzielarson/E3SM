@@ -108,7 +108,7 @@ contains
 
       real(kind=RKIND), dimension(:), pointer :: refBottomDepth, &
                                                  fCell, fEdge, fVertex, effectiveDensityInLandIce, xCell, &
-                                                 refZMid, refLayerThickness
+                                                 refZMid, refLayerThickness, landIceDraft
 
       real(kind=RKIND), dimension(:,:), pointer :: layerThickness
       real(kind=RKIND), dimension(:,:,:), pointer :: activeTracers
@@ -142,9 +142,11 @@ contains
       do while(associated(block_ptr))
         call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block_ptr % structs, 'verticalMesh', verticalMeshPool)
+        call mpas_pool_get_subpool(block_ptr % structs, 'forcing', forcingPool)
         call mpas_pool_get_array(meshPool, 'refBottomDepth', refBottomDepth)
         call mpas_pool_get_array(verticalMeshPool, 'refLayerThickness', refLayerThickness)
         call mpas_pool_get_array(verticalMeshPool, 'refZMid', refZMid)
+        call mpas_pool_get_array(forcingPool, 'landIceDraft', landIceDraft)
 
         ! Set refBottomDepth
         refBottomDepth(1) =  columnThicknessFraction(1)*abs(config_isomip_plus_max_bottom_depth)
@@ -153,9 +155,10 @@ contains
         end do
 
         ! Compute refLayerThickness
+        !! add landIceMask
         call ocn_compute_z_level_layerThickness(refLayerThickness, refBottomDepth, 0.0_RKIND, &
-                                                refBottomDepth(nVertLevels), 1,               &
-                                                nVertLevels, nVertLevels, iErr)
+                                                refBottomDepth(nVertLevels), minLevelCell(nVertLevels),               &
+                                                nVertLevels, nVertLevels, iErr, landIceDraft(nVertLevels))
 
         ! Compute refZMid
         call ocn_compute_zMid_from_layerThickness(refZMid, refLayerThickness, 0.0_RKIND, 1, &
